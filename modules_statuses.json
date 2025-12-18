@@ -1,0 +1,9 @@
+{
+    "Crm": true,
+    "TaskManager": true,
+    "Site": true,
+    "user-avatar-main": false,
+    "Esp32Data": true,
+    "Esp32data": true,
+    "DeviceManager": true
+}

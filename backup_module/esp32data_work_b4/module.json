@@ -1,0 +1,16 @@
+{
+    "name": "Esp32data",
+    "alias": "esp32data",
+    "description": "",
+    "icon": "bi-list-task",
+    "keywords": [
+        "data",
+        "list",
+		"manager"
+    ],
+    "priority": 0,
+    "providers": [
+        "Modules\\Esp32data\\Providers\\Esp32dataServiceProvider"
+    ],
+    "files": []
+}

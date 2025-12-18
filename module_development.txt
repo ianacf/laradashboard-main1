@@ -1,0 +1,1261 @@
+https://laradashboard.com/docs/how-to-build-a-full-featured-task-management-module-in-lara-dashboard-step-by-step-guide/
+
+Skip to content
+LaraDashboard-Black-Logo
+Home
+Modules
+Pricing
+Documentation
+Release Notes
+Tutorials
+Feedback
+Contact Us
+Try Demo
+
+Documentation
+Everything you need to install, configure, and scale Lara Dashboard—clear guides and docs all in one place.
+
+Search docs...
+Installations
+Hooks
+Modules
+How to Create a Module in Lara Dashboard easily
+How to Build a Full-Featured Task Management Module in Lara Dashboard (Step-by-Step Guide)
+Modules with Livewire
+Settings
+Styling
+Components
+Menu
+Home
+Docs
+Modules
+How to Build a Full-Featured Task Management Module in Lara Dashboard (Step-by-Step Guide)
+How to Build a Full-Featured Task Management Module in Lara Dashboard (Step-by-Step Guide)
+25 min read
+
+In this in-depth tutorial, you’ll learn how to build a complete Task Management Module within Lara Dashboard, our modular Laravel-based admin panel. We’ll walk you through the entire process—from setting up the database, seeders, permissions, menus, and form builders, to creating fully functional pages.
+
+Whether you’re a beginner looking to understand module development or an advanced user building real-world features, this tutorial offers a comprehensive, hands-on approach. By the end, you’ll have a fully working task manager module that can be integrated into any Lara Dashboard-powered Laravel application.
+
+💡 This will be a long-form, detailed guide—perfect for those who want to master modular development in Lara Dashboard the right way.
+
+Step 1: Run Module create command
+First step is to run this command to create a TaskManager module in Lara Dashboard inside /Modules folder. We need to run this command by staying inside the root project of Lara Dashboard.
+
+php artisan module:make TaskManager
+Once, you run this command, a folder called TaskManager would be created inside Modules folder of Lara Dashboard. Which file structure is normally like this –
+
+Laravel Module Structure | Lara Dashboard
+This is actually a mini Laravel application. Once its created, the module will be automatically activated in the module list of Lara Dashboard.
+
+Lets add icon and tags for the module in the module.json file –
+
+module.json
+{
+    "name": "TaskManager",
+    "alias": "taskmanager",
+    "description": "",
+    "icon": "bi-list-task",
+    "keywords": [
+        "task",
+        "manager",
+        "todo",
+        "list"
+    ],
+    "priority": 0,
+    "providers": [
+        "Modules\\TaskManager\\Providers\\TaskManagerServiceProvider"
+    ],
+    "files": []
+}
+And then, we’ll able to get the module in the module list of Lara Dashboard like so –
+
+Task Manager Module in Module List | Lara Dashboard
+Step 2: Add Database, Model, Migration, Seeders
+Now, run command to create a migration file with model – Task on this TaskManager module.
+
+php artisan module:make-model Task -m TaskManager
+Once, you run this command, inside the Modules/TaskManager/app/Models, Task.php file will be created and also migration file would be created in Modules/TaskManager/database/migrations/2025_06_17_053323_create_tasks_table.php or something like that file
+
+Migration file:
+
+2025_06_17_053323_create_tasks_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class () extends Migration {
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('tasks', function (Blueprint $table) {
+            $table->id();
+            $table->string('title');
+            $table->text('description')->nullable();
+            $table->enum('priority', ['low', 'medium', 'high'])->default('medium');
+            $table->enum('status', ['pending', 'in_progress', 'completed'])->default('pending');
+            $table->unsignedBigInteger('assigned_to')->nullable();
+            $table->foreign('assigned_to')->references('id')->on('users')->onDelete('set null');
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->foreign('created_by')->references('id')->on('users')->onDelete('set null');
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->foreign('updated_by')->references('id')->on('users')->onDelete('set null');
+
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('tasks');
+    }
+};
+Task Faker factory:
+
+Create TaskFactory.php file inside factories to make fake tasks initially –
+
+TaskFactory.php
+<?php
+
+namespace Modules\TaskManager\Database\Factories;
+
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+class TaskFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     */
+    protected $model = \Modules\TaskManager\Models\Task::class;
+
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [
+            'title' => $this->faker->sentence,
+            'description' => $this->faker->paragraph,
+            'status' => $this->faker->randomElement(['pending', 'in_progress', 'completed']),
+            'priority' => $this->faker->randomElement(['low', 'medium', 'high']),
+            'assigned_to' => $this->faker->numberBetween(1, 10), // Assuming user IDs from 1 to 10
+            'created_by' => $this->faker->numberBetween(1, 10), // Assuming user IDs from 1 to 10
+        ];
+    }
+}
+Task Model:
+
+Great, now add the fillable and some other properties to the Task model. Edit the Task.php file like this –
+
+Task.php
+<?php
+
+namespace Modules\TaskManager\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Modules\TaskManager\Database\Factories\TaskFactory;
+use App\Traits\QueryBuilderTrait;
+use App\Models\User;
+
+class Task extends Model
+{
+    use HasFactory;
+    use QueryBuilderTrait;
+
+    /**
+     * The attributes that are mass assignable.
+     */
+    protected $fillable = [
+        'title',
+        'description',
+        'status',
+        'priority',
+        'assigned_to',
+        'created_by',
+    ];
+
+    protected static function newFactory(): TaskFactory
+    {
+        return TaskFactory::new();
+    }
+
+    /**
+     * Get searchable columns for the model.
+     */
+    protected function getSearchableColumns(): array
+    {
+        return ['title', 'status', 'priority'];
+    }
+
+    /**
+     * Get columns that should be excluded from sorting.
+     */
+    protected function getExcludedSortColumns(): array
+    {
+        return [];
+    }
+
+    public function assigned()
+    {
+        return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    public static function statuses(): array
+    {
+        return [
+            'pending' => __('Pending'),
+            'in_progress' => __('In Progress'),
+            'completed' => __('Completed'),
+        ];
+    }
+
+    public static function priorities(): array
+    {
+        return [
+            'low' => __('Low'),
+            'medium' => __('Medium'),
+            'high' => __('High'),
+        ];
+    }
+}
+You can see, we’ve added many things in this Model file. I’ll describe the every methods and their usefullness.
+
+Seeder Files:
+
+Lets create the seeder file now.
+
+Task permissions
+Dummy tasks lists
+Inside seeders folder, we’ll add TaskPermissionSeeder.php
+
+TaskPermissionsSeeder.php
+<?php
+
+namespace Modules\TaskManager\Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+
+class TaskPermissionsSeeder extends Seeder
+{
+    /**
+     * Run the database seeds.
+     */
+    public function run(): void
+    {
+        // Permission List as array.
+        $permissions = [
+            [
+                'group_name' => 'task',
+                'permissions' => [
+                    'task.create',
+                    'task.view',
+                    'task.edit',
+                    'task.delete',
+                ],
+            ],
+        ];
+
+        $roleSuperAdmin = Role::firstOrCreate(['name' => 'Superadmin']);
+
+        for ($i = 0; $i < count($permissions); $i++) {
+            $permissionGroup = $permissions[$i]['group_name'];
+            for ($j = 0; $j < count($permissions[$i]['permissions']); $j++) {
+                $permissionExist = Permission::where('name', $permissions[$i]['permissions'][$j])->first();
+                if (is_null($permissionExist)) {
+                    $permission = Permission::create(
+                        [
+                            'name' => $permissions[$i]['permissions'][$j],
+                            'group_name' => $permissionGroup,
+                            'guard_name' => 'web',
+                        ]
+                    );
+                    $roleSuperAdmin->givePermissionTo($permission->name);
+                    $permission->assignRole($roleSuperAdmin);
+                }
+            }
+        }
+    }
+}
+Now update the TaskManagerDatabaseSeeder.php file to add that permission seeder and also the fake tasks –
+
+TaskManagerDatabaseSeeder.php
+<?php
+
+namespace Modules\TaskManager\Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Illuminate\Database\Eloquent\Model;
+use Modules\TaskManager\Models\Task;
+
+class TaskManagerDatabaseSeeder extends Seeder
+{
+    /**
+     * Run the database seeds.
+     */
+    public function run(): void
+    {
+        Model::unguard();
+
+        $this->call([
+            TaskPermissionsSeeder::class,
+        ]);
+
+        Task::factory(20)->create();
+
+        Model::reguard();
+    }
+}
+Great, our database, model, migration, permissions are ready to be migrated. Now run the fresh command of Lara Dashboard
+
+php artisan migrate:fresh --seed && php artisan module:seed
+If another prompt come like this, select all and continue.
+
+Artisan migrate run command | Lara Dashboard
+Step 3: Add request, service class
+Create a file called TaskService inside app/Services/TaskService.php file
+
+TaskService.php
+<?php
+
+namespace Modules\TaskManager\Services;
+
+use Modules\TaskManager\Models\Task;
+
+class TaskService
+{
+    /**
+     * Get tasks with filters
+     *
+     * @return \Illuminate\Pagination\LengthAwarePaginator
+     */
+    public function getTasks(array $filters = [])
+    {
+        $query = Task::applyFilters($filters);
+
+        if (isset($filters['priority']) && $filters['priority']) {
+            $query->where('priority', $filters['priority']);
+        }
+
+        return $query->paginateData();
+    }
+
+    /**
+     * Create a new task
+     *
+     * @param array $data
+     * @return Task
+     */
+    public function createTask(array $data): Task
+    {
+        $task = new Task();
+        $task->fill($data);
+        $task->created_by = auth()->id();
+        $task->save();
+
+        return $task;
+    }
+
+    /**
+     * Update an existing task
+     *
+     * @param Task $task
+     * @param array $data
+     * @return Task
+     */
+    public function updateTask(Task $task, array $data): Task
+    {
+        $task->fill($data);
+        $task->save();
+
+        return $task;
+    }
+
+    /**
+     * Delete a task
+     *
+     * @param Task $task
+     * @return void
+     */
+    public function deleteTask(Task $task): void
+    {
+        $task->delete();
+    }
+
+    /**
+     * Get task by ID
+     *
+     * @param int $id
+     * @return Task|null
+     */
+    public function getTaskById(int $id): ?Task
+    {
+        return Task::find($id);
+    }
+
+    /**
+     * Get tasks by task ids
+     *
+     * @param int $userId
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function getTasksByIds(array $taskIds)
+    {
+        return Task::whereIn('id', $taskIds)->get();
+    }
+}
+This service class will use in our controller to get the data from database.
+
+Now, lets create request validation class to validate task requests inside app/Http/Requests/TaskRequest.php
+
+TaskRequest.php
+<?php
+
+declare(strict_types=1);
+
+namespace Modules\TaskManager\Http\Requests;
+
+use App\Http\Requests\FormRequest;
+
+class TaskRequest extends FormRequest
+{
+    /**
+     * Determine if the user is authorized to make this request.
+     */
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array|string>
+     */
+    public function rules(): array
+    {
+        return ld_apply_filters('tasks.validation.rules', [
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'status' => 'required|in:pending,in_progress,completed',
+            'assigned_to' => 'nullable|exists:users,id',
+            'priority' => 'nullable|in:low,medium,high',
+        ]);
+    }
+}
+This will be used to validate the requests for both create, edit endpoints of the task create/update.
+
+Step 4: Route, Controller, View
+In routes/web.php file add related route for the task views.
+
+Route web.php:
+
+web.php
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Modules\TaskManager\Http\Controllers\TaskManagerController;
+
+Route::middleware(['auth', 'verified'])
+    ->prefix('admin')
+    ->name('admin.')
+    ->group(function () {
+        Route::resource('tasks', TaskManagerController::class)
+            ->names('tasks');
+        Route::delete('tasks/delete/bulk-delete', [TaskManagerController::class, 'bulkDelete'])->name('tasks.bulk-delete');
+    });
+Lets create the controller now with related actions –
+
+Controller TaskManagerController.php:
+
+TaskManagerController.php
+<?php
+
+declare(strict_types=1);
+
+namespace Modules\TaskManager\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Modules\TaskManager\Models\Task;
+use Modules\TaskManager\Services\TaskService;
+use App\Models\User;
+use Illuminate\Http\RedirectResponse;
+use Modules\TaskManager\Http\Requests\TaskRequest;
+use App\Enums\ActionType;
+
+class TaskManagerController extends Controller
+{
+    public function __construct(
+        private readonly TaskService $taskService,
+    ) {
+    }
+
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        $this->checkAuthorization(Auth::user(), ['task.view']);
+
+        $filters = [
+            'search' => request('search'),
+            'status' => request('status'),
+            'priority' => request('priority'),
+        ];
+
+        return view('taskmanager::index', [
+            'tasks' => $this->taskService->getTasks($filters),
+            'filters' => $filters,
+            'statuses' => Task::statuses(),
+            'priorities' => Task::priorities(),
+            'breadcrumbs' => [
+                'title' => __('Tasks'),
+            ],
+        ]);
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        $this->checkAuthorization(Auth::user(), ['task.create']);
+
+        return view('taskmanager::create', [
+            'statuses' => Task::statuses(),
+            'priorities' => Task::priorities(),
+            'users' => User::pluck('name', 'id')->toArray(),
+            'breadcrumbs' => [
+                'title' => __('Create Task'),
+                'items' => [
+                    [
+                        'label' => __('Tasks'),
+                        'url' => route('admin.tasks.index'),
+                    ],
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(TaskRequest $request)
+    {
+        $this->checkAuthorization(Auth::user(), ['task.create']);
+
+        try {
+            $this->taskService->createTask($request->validated());
+            $this->storeActionLog(ActionType::CREATED, ['task' => $request->validated()]);
+            return redirect()->route('admin.tasks.index')->with('success', __('Task created successfully.'));
+        } catch (\Throwable $th) {
+            return redirect()->back()->with('error', __('Failed to create task.'));
+        }
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(int $id)
+    {
+        $this->checkAuthorization(Auth::user(), ['task.edit']);
+
+        $task = $this->taskService->getTaskById((int) $id);
+        return view('taskmanager::edit', [
+            'task' => $task,
+            'statuses' => Task::statuses(),
+            'priorities' => Task::priorities(),
+            'users' => User::pluck('name', 'id')->toArray(),
+            'breadcrumbs' => [
+                'title' => __('Edit Task'),
+                'items' => [
+                    [
+                        'label' => __('Tasks'),
+                        'url' => route('admin.tasks.index'),
+                    ],
+                ],
+            ],
+        ]);
+    }
+
+    public function update(TaskRequest $request, int $id): RedirectResponse
+    {
+        $this->checkAuthorization(Auth::user(), ['task.edit']);
+
+        try {
+            $task = $this->taskService->getTaskById((int) $id);
+            $this->taskService->updateTask($task, $request->validated());
+            $this->storeActionLog(ActionType::UPDATED, ['task' => $task]);
+            return redirect()->route('admin.tasks.index')->with('success', __('Task updated successfully.'));
+        } catch (\Throwable $th) {
+            return redirect()->back()->with('error', __('Failed to update task.'));
+        }
+    }
+
+    public function destroy(int $id)
+    {
+        $this->checkAuthorization(Auth::user(), ['task.delete']);
+
+        try {
+            $task = $this->taskService->getTaskById((int) $id);
+            $this->taskService->deleteTask($task);
+            $this->storeActionLog(ActionType::DELETED, ['task' => $task]);
+            return redirect()->route('admin.tasks.index')->with('success', __('Task deleted successfully.'));
+        } catch (\Throwable $th) {
+            return redirect()->back()->with('error', __('Failed to delete task.'));
+        }
+    }
+
+    public function bulkDelete(Request $request): RedirectResponse
+    {
+        $this->checkAuthorization(Auth::user(), ['task.delete']);
+
+        $ids = $request->input('ids', []);
+
+        if (empty($ids)) {
+            return redirect()->route('admin.tasks.index')
+                ->with('error', __('No tasks selected for deletion'));
+        }
+
+        $tasks = $this->taskService->getTasksByIds($ids);
+        $deletedCount = 0;
+
+        foreach ($tasks as $task) {
+            $task = ld_apply_filters('task_delete_before', $task);
+            $task->delete();
+            ld_apply_filters('task_delete_after', $task);
+
+            $this->storeActionLog(ActionType::DELETED, ['task' => $task]);
+            ld_do_action('task_delete_after', $task);
+
+            $deletedCount++;
+        }
+
+        if ($deletedCount > 0) {
+            session()->flash('success', __(':count tasks deleted successfully', ['count' => $deletedCount]));
+        } else {
+            session()->flash('error', __('No tasks were deleted. Selected tasks may include protected accounts.'));
+        }
+
+        return redirect()->route('admin.tasks.index');
+    }
+}
+View:
+
+Now add the respective view files for these
+
+Modules/TaskManager/resources/views/index.blade.php
+
+index.blade.php
+@extends('backend.layouts.app')
+
+@section('title')
+   {{ $breadcrumbs['title'] }} | {{ config('app.name') }}
+@endsection
+
+@section('admin-content')
+
+<div class="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6" x-data="{ selectedTasks: [], selectAll: false, bulkDeleteModalOpen: false }">
+    <x-breadcrumbs :breadcrumbs="$breadcrumbs">
+        <x-slot name="title_after">
+            @can('task.view')
+            <a href="{{ route('admin.tasks.create') }}" class="btn-primary ml-2">
+                <i class="bi bi-plus-circle mr-2"></i>
+                {{ __('New Task') }}
+            </a>
+            @endcan
+        </x-slot>
+    </x-breadcrumbs>
+
+    {!! ld_apply_filters('tasks_after_breadcrumbs', '') !!}
+
+    <div class="space-y-6">
+        <div class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+          <div class="px-5 py-4 sm:px-6 sm:py-5 flex gap-3 md:gap-1 flex-col md:flex-row justify-between items-center">
+                <h3 class="text-base font-medium text-gray-800 dark:text-white/90 hidden md:block">
+                    {{ __('Tasks') }}
+                </h3>
+
+                @include('backend.partials.search-form', [
+                    'placeholder' => __('Search by title'),
+                ])
+
+                <div class="flex items-center gap-2">
+                    <!-- Bulk Actions dropdown -->
+                    <div class="flex items-center justify-center" x-show="selectedTasks.length > 0">
+                        <button id="bulkActionsButton" data-dropdown-toggle="bulkActionsDropdown" class="btn-danger flex items-center justify-center gap-2 text-sm" type="button">
+                            <i class="bi bi-trash"></i>
+                            <span>{{ __('Bulk Actions') }} (<span x-text="selectedTasks.length"></span>)</span>
+                            <i class="bi bi-chevron-down"></i>
+                        </button>
+
+                        <!-- Bulk Actions dropdown menu -->
+                        <div id="bulkActionsDropdown" class="z-10 hidden w-48 p-3 bg-white rounded-lg shadow dark:bg-gray-700">
+                            <h6 class="mb-2 text-sm font-medium text-gray-900 dark:text-white">{{ __('Bulk Actions') }}</h6>
+                            <ul class="space-y-2">
+                                <li class="cursor-pointer text-sm text-red-600 dark:text-red-400 hover:bg-gray-200 dark:hover:bg-gray-600 px-2 py-1 rounded"
+                                    @click="bulkDeleteModalOpen = true">
+                                    <i class="bi bi-trash mr-1"></i> {{ __('Delete Selected') }}
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-center gap-2">
+                        <button id="priorityDropdownButton" data-dropdown-toggle="priorityDropdown" class="btn-default flex items-center justify-center gap-2" type="button">
+                            <i class="bi bi-sliders"></i>
+                            {{ __('Filter by Priority') }}
+                            <i class="bi bi-chevron-down"></i>
+                        </button>
+                        <div id="priorityDropdown" class="z-10 hidden w-56 p-3 bg-white rounded-lg shadow dark:bg-gray-700">
+                            <ul class="space-y-2">
+                                <li class="cursor-pointer text-sm text-gray-700 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 px-2 py-1 rounded"
+                                    onclick="handleFilter('', 'priority')">
+                                    {{ __('All Priorities') }}
+                                </li>
+                                @foreach ($priorities as $key => $priority)
+                                    <li class="cursor-pointer text-sm text-gray-700 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 px-2 py-1 rounded"
+                                        onclick="handleFilter('{{ $key }}', 'priority')">
+                                        {{ ucfirst($priority) }}
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+
+                        <button id="statusDropdownButton" data-dropdown-toggle="statusDropdown" class="btn-default flex items-center justify-center gap-2" type="button">
+                            <i class="bi bi-sliders"></i>
+                            {{ __('Filter by Status') }}
+                            <i class="bi bi-chevron-down"></i>
+                        </button>
+                        <div id="statusDropdown" class="z-10 hidden w-56 p-3 bg-white rounded-lg shadow dark:bg-gray-700">
+                            <ul class="space-y-2">
+                                <li class="cursor-pointer text-sm text-gray-700 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 px-2 py-1 rounded"
+                                    onclick="handleFilter('', 'status')">
+                                    {{ __('All Statuses') }}
+                                </li>
+                                @foreach ($statuses as $key => $status)
+                                    <li class="cursor-pointer text-sm text-gray-700 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 px-2 py-1 rounded"
+                                        onclick="handleFilter('{{ $key }}', 'status')">
+                                        {{ ucfirst($status) }}
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="space-y-3 border-t border-gray-100 dark:border-gray-800 overflow-x-auto overflow-y-visible">
+                <table id="dataTable" class="w-full dark:text-gray-400">
+                    <thead class="bg-light text-capitalize">
+                        <tr class="border-b border-gray-100 dark:border-gray-800">
+                            <th width="5%" class="p-2 bg-gray-50 dark:bg-gray-800 dark:text-white text-left px-5">
+                                <div class="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        class="form-checkbox h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary dark:focus:ring-primary dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                                        x-model="selectAll"
+                                        @click="
+                                            selectAll = !selectAll;
+                                            selectedTasks = selectAll ?
+                                                [...document.querySelectorAll('.user-checkbox')].map(cb => cb.value) :
+                                                [];
+                                        "
+                                    >
+                                </div>
+                            </th>
+                            <th width="20%" class="p-2 bg-gray-50 dark:bg-gray-800 dark:text-white text-left px-5">
+                                <div class="flex items-center">
+                                    {{ __('Title') }}
+                                    <a href="{{ request()->fullUrlWithQuery(['sort' => request()->sort === 'title' ? '-title' : 'title']) }}" class="ml-1">
+                                        @if(request()->sort === 'title')
+                                            <i class="bi bi-sort-alpha-down text-primary"></i>
+                                        @elseif(request()->sort === '-title')
+                                            <i class="bi bi-sort-alpha-up text-primary"></i>
+                                        @else
+                                            <i class="bi bi-arrow-down-up text-gray-400"></i>
+                                        @endif
+                                    </a>
+                                </div>
+                            </th>
+                            <th width="10%" class="p-2 bg-gray-50 dark:bg-gray-800 dark:text-white text-left px-5">
+                                <div class="flex items-center">
+                                    {{ __('Status') }}
+                                    <a href="{{ request()->fullUrlWithQuery(['sort' => request()->sort === 'status' ? '-status' : 'status']) }}" class="ml-1">
+                                        @if(request()->sort === 'status')
+                                            <i class="bi bi-sort-alpha-down text-primary"></i>
+                                        @elseif(request()->sort === '-status')
+                                            <i class="bi bi-sort-alpha-up text-primary"></i>
+                                        @else
+                                            <i class="bi bi-arrow-down-up text-gray-400"></i>
+                                        @endif
+                                    </a>
+                                </div>
+                            </th>
+                            <th width="10%" class="p-2 bg-gray-50 dark:bg-gray-800 dark:text-white text-left px-5">
+                                {{ __('Priority') }}
+                                <a href="{{ request()->fullUrlWithQuery(['sort' => request()->sort === 'priority' ? '-priority' : 'priority']) }}" class="ml-1">
+                                    @if(request()->sort === 'priority')
+                                        <i class="bi bi-sort-alpha-down text-primary"></i>
+                                    @elseif(request()->sort === '-priority')
+                                        <i class="bi bi-sort-alpha-up text-primary"></i>
+                                    @else
+                                        <i class="bi bi-arrow-down-up text-gray-400"></i>
+                                    @endif
+                                </a>
+                            </th>
+                            <th width="20%" class="p-2 bg-gray-50 dark:bg-gray-800 dark:text-white text-left px-5">{{ __('Assigned to') }}</th>
+                            @php ld_apply_filters('user_list_page_table_header_before_action', '') @endphp
+                            <th width="15%" class="p-2 bg-gray-50 dark:bg-gray-800 dark:text-white text-left px-5">{{ __('Action') }}</th>
+                            @php ld_apply_filters('user_list_page_table_header_after_action', '') @endphp
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($tasks as $task)
+                            <tr class="{{ $loop->index + 1 != count($tasks) ?  'border-b border-gray-100 dark:border-gray-800' : '' }}">
+                                <td class="px-5 py-4 sm:px-6">
+                                    <input
+                                        type="checkbox"
+                                        class="user-checkbox form-checkbox h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary dark:focus:ring-primary dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                                        value="{{ $task->id }}"
+                                        x-model="selectedTasks"
+                                    >
+                                </td>
+                                <td class="px-5 py-4 sm:px-6 flex items-center md:min-w-[200px]">
+                                    <a data-tooltip-target="tooltip-user-{{ $task->id }}" href="{{ route('admin.tasks.edit', $task->id) }}" class="flex items-center">
+                                        <div class="flex flex-col">
+                                            <span>{{ $task->title }}</span>
+                                            <span class="text-xs text-gray-500 dark:text-gray-400">{{ $task->username }}</span>
+                                        </div>
+                                    </a>
+                                    <div id="tooltip-user-{{ $task->id }}" href="{{ route('admin.tasks.edit', $task->id) }}" class="absolute z-10 invisible inline-block px-3 py-2 text-sm font-medium text-white transition-opacity duration-300 bg-gray-900 rounded-lg shadow-xs opacity-0 tooltip dark:bg-gray-700">
+                                        {{ __('Edit Task') }}
+                                        <div class="tooltip-arrow" data-popper-arrow></div>
+                                    </div>
+                                </td>
+                                <td class="px-5 py-4 sm:px-6">{{ $statuses[$task->status] ?? __('Unknown') }}</td>
+                                <td class="px-5 py-4 sm:px-6">{{ ucfirst($task->priority) }}</td>
+                                <td class="px-5 py-4 sm:px-6">{{ $task->assigned->name ?? __('Unassigned') }}</td>
+                                @php ld_apply_filters('user_list_page_table_row_before_action', '', $task) @endphp
+                                <td class="px-5 py-4 sm:px-6 flex justify-center">
+                                    <x-buttons.action-buttons :label="__('Actions')" :show-label="false" align="right">
+                                        @can('task.edit')
+                                        <x-buttons.action-item
+                                            :href="route('admin.tasks.edit', $task->id)"
+                                            icon="pencil"
+                                            :label="__('Edit')"
+                                        />
+                                        @endcan
+
+                                        @can('task.delete')
+                                        <div x-data="{ deleteModalOpen: false }">
+                                            <x-buttons.action-item
+                                                type="modal-trigger"
+                                                modal-target="deleteModalOpen"
+                                                icon="trash"
+                                                :label="__('Delete')"
+                                                class="text-red-600 dark:text-red-400"
+                                            />
+
+                                            <x-modals.confirm-delete
+                                                id="delete-modal-{{ $task->id }}"
+                                                title="{{ __('Delete Task') }}"
+                                                content="{{ __('Are you sure you want to delete this task?') }}"
+                                                formId="delete-form-{{ $task->id }}"
+                                                formAction="{{ route('admin.tasks.destroy', $task->id) }}"
+                                                modalTrigger="deleteModalOpen"
+                                                cancelButtonText="{{ __('No, cancel') }}"
+                                                confirmButtonText="{{ __('Yes, Confirm') }}"
+                                            />
+                                        </div>
+                                        @endcan
+                                    </x-buttons.action-buttons>
+                                </td>
+                                @php ld_apply_filters('user_list_page_table_row_after_action', '', $task) @endphp
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="5" class="text-center py-4">
+                                    <p class="text-gray-500 dark:text-gray-400">{{ __('No tasks found') }}</p>
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+
+                <div class="my-4 px-4 sm:px-6">
+                    {{ $tasks->links() }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @can('task.delete')
+    <!-- Bulk Delete Confirmation Modal -->
+    <div
+        x-cloak
+        x-show="bulkDeleteModalOpen"
+        x-transition.opacity.duration.200ms
+        x-trap.inert.noscroll="bulkDeleteModalOpen"
+        x-on:keydown.esc.window="bulkDeleteModalOpen = false"
+        x-on:click.self="bulkDeleteModalOpen = false"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4 backdrop-blur-md"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bulk-delete-modal-title"
+    >
+        <div
+            x-show="bulkDeleteModalOpen"
+            x-transition:enter="transition ease-out duration-200 delay-100 motion-reduce:transition-opacity"
+            x-transition:enter-start="opacity-0 scale-50"
+            x-transition:enter-end="opacity-100 scale-100"
+            class="flex max-w-md flex-col gap-4 overflow-hidden rounded-lg border border-outline border-gray-100 dark:border-gray-800 bg-white text-on-surface dark:border-outline-dark dark:bg-gray-700 dark:text-gray-400"
+        >
+            <div class="flex items-center justify-between border-b border-gray-100 px-4 py-2 dark:border-gray-800">
+                <div class="flex items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 p-1">
+                    <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
+                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 11V6m0 8h.01M19 10a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+                    </svg>
+                </div>
+                <h3 id="bulk-delete-modal-title" class="font-semibold tracking-wide text-gray-800 dark:text-white">
+                    {{ __('Delete Selected Tasks') }}
+                </h3>
+                <button
+                    x-on:click="bulkDeleteModalOpen = false"
+                    aria-label="close modal"
+                    class="text-gray-400 hover:bg-gray-200 hover:text-gray-900 rounded-lg p-1 dark:hover:bg-gray-600 dark:hover:text-white"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="1.4" class="w-5 h-5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="px-4 text-center">
+                <p class="text-gray-500 dark:text-gray-400">
+                    {{ __('Are you sure you want to delete the selected tasks?') }}
+                    {{ __('This action cannot be undone.') }}
+                </p>
+            </div>
+            <div class="flex items-center justify-end gap-3 border-t border-gray-100 p-4 dark:border-gray-800">
+                <form id="bulk-delete-form" action="{{ route('admin.tasks.bulk-delete') }}" method="POST">
+                    @method('DELETE')
+                    @csrf
+
+                    <template x-for="id in selectedTasks" :key="id">
+                        <input type="hidden" name="ids[]" :value="id">
+                    </template>
+
+                    <button
+                        type="button"
+                        x-on:click="bulkDeleteModalOpen = false"
+                        class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-700 dark:hover:text-white dark:focus:ring-gray-700"
+                    >
+                        {{ __('No, Cancel') }}
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-300 dark:focus:ring-red-800"
+                    >
+                        {{ __('Yes, Delete') }}
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endcan
+</div>
+
+@push('scripts')
+<script>
+    function handleFilter(value, sortKey = 'status') {
+        let currentUrl = new URL(window.location.href);
+
+        // Preserve sort parameter if it exists.
+        const sortParam = currentUrl.searchParams.get('sort');
+
+        // Reset the search params but keep the sort if it exists.
+        currentUrl.search = '';
+
+        if (value) {
+            currentUrl.searchParams.set(sortKey, value);
+        }
+
+        // Re-add sort parameter if it existed.
+        if (sortParam) {
+            currentUrl.searchParams.set('sort', sortParam);
+        }
+
+        window.location.href = currentUrl.toString();
+    }
+</script>
+@endpush
+@endsection
+Modules/TaskManager/resources/views/partials/form.blade.php
+
+form.blade.php
+<form action="{{ $action }}" method="POST">
+    @method($method ?? 'POST')
+    @csrf
+    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <div>
+            <label for="title" class="block text-sm font-medium text-gray-700 dark:text-gray-400">{{ __('Task Title') }}</label>
+            <input type="text" name="title" id="title" required autofocus value="{{ old('title', $task->title ?? '') }}" placeholder="{{ __('Enter Task Title') }}" class="form-control">
+        </div>
+        <div>
+            <x-inputs.combobox
+                name="priority"
+                label="{{ __('Priority') }}"
+                placeholder="{{ __('Select Priority') }}"
+                :options="collect($priorities)->map(fn($name, $id) => ['value' => $id, 'label' => ucfirst($name)])->values()->toArray()"
+                :selected="old('priority', $task->priority ?? '')"
+                :searchable="false"
+            />
+        </div>
+        <div>
+                <x-inputs.combobox
+                name="status"
+                label="{{ __('Status') }}"
+                placeholder="{{ __('Select Status') }}"
+                :options="collect($statuses)->map(fn($name, $id) => ['value' => $id, 'label' => ucfirst($name)])->values()->toArray()"
+                :selected="old('status', $task->status ?? '')"
+                :searchable="false"
+            />
+        </div>
+        <div>
+                <x-inputs.combobox
+                name="assigned_to"
+                label="{{ __('Assigned To') }}"
+                placeholder="{{ __('Select User') }}"
+                :options="collect($users)->map(fn($name, $id) => ['value' => $id, 'label' => ucfirst($name)])->values()->toArray()"
+                :selected="old('assigned_to', $task->assigned_to ?? '')"
+                :searchable="false"
+            />
+        </div>
+    </div>
+    <div class="mt-4">
+        <label for="description" class="block text-sm font-medium text-gray-700 dark:text-gray-400">{{ __('Description') }}</label>
+        <textarea name="description" id="description" rows="10">{!! old('description', $task->description ?? '') !!}</textarea>
+    </div>
+    <div class="mt-6 flex justify-start gap-4">
+        <button type="submit" class="btn-primary">{{ __('Save') }}</button>
+        <a href="{{ route('admin.tasks.index') }}" class="btn-default">{{ __('Cancel') }}</a>
+    </div>
+</form>
+Modules/TaskManager/resources/views/create.blade.php
+
+create.blade.php
+@extends('backend.layouts.app')
+
+@section('title')
+    {{ $breadcrumbs['title'] }} | {{ config('app.name') }}
+@endsection
+
+@section('admin-content')
+
+<div class="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">
+   <x-breadcrumbs :breadcrumbs="$breadcrumbs" />
+
+    {!! ld_apply_filters('tasks_after_breadcrumbs', '') !!}
+
+    <div class="space-y-6">
+        <div class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+            <div class="p-5 space-y-6 border-t border-gray-100 dark:border-gray-800 sm:p-6">
+                @include('taskmanager::partials.form', [
+                    'action' => route('admin.tasks.store'),
+                    'method' => 'POST',
+                    'task' => null,
+                ])
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@push('scripts')
+<x-quill-editor :type="'basic'" :editor-id="'description'" />
+@endpush
+Modules/TaskManager/resources/views/edit.blade.php
+
+edit.blade.php
+@extends('backend.layouts.app')
+
+@section('title')
+    {{ $breadcrumbs['title'] }} | {{ config('app.name') }}
+@endsection
+
+@section('admin-content')
+
+<div class="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">
+   <x-breadcrumbs :breadcrumbs="$breadcrumbs" />
+
+    {!! ld_apply_filters('tasks_after_breadcrumbs', '') !!}
+
+    <div class="space-y-6">
+        <div class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+            <div class="p-5 space-y-6 border-t border-gray-100 dark:border-gray-800 sm:p-6">
+                @include('taskmanager::partials.form', [
+                    'action' => route('admin.tasks.update', $task->id),
+                    'method' => 'PUT',
+                    'task' => $task
+                ])
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@push('scripts')
+<x-quill-editor :type="'basic'" :editor-id="'description'" />
+@endpush
+Step 5: Add Task Manager Menu
+In Providers/TaskManagerServiceProvider.php file –
+
+in boot() method – add the filter hook – admin_menu_groups_before_sorting
+
+public function boot(): void
+{
+        // rest of the code.
+
+        $this->app->booted(function () {
+            ld_add_filter('admin_menu_groups_before_sorting', [$this, 'addTaskManagerMenu']);
+        });
+}
+Now add the addTaskManagerMenu() method
+
+public function addTaskManagerMenu(array $groups): array
+{
+        $childMenusItems = [
+            (new AdminMenuItem())->setAttributes([
+                'label' => __('Tasks List'),
+                'route' => route('admin.tasks.index'),
+                'active' => Route::is('admin.tasks.index'),
+                'priority' => 1,
+                'id' => 'tasks_manager_index',
+                'permissions' => ['task.view'],
+            ]),
+            (new AdminMenuItem())->setAttributes([
+                'label' => __('New Task'),
+                'route' => route('admin.tasks.create'),
+                'active' => Route::is('admin.tasks.create'),
+                'priority' => 2,
+                'id' => 'tasks_manager_create',
+                'permissions' => ['task.create'],
+            ]),
+        ];
+
+        $adminMenuItem = (new AdminMenuItem())->setAttributes([
+            'label' => __('Task Manager'),
+            'iconClass' => 'bi bi-list-task',
+            'route' => route('admin.tasks.index'),
+            'active' => Route::is('admin.tasks.*'),
+            'id' => 'task-manager',
+            'priority' => 21,
+            'permissions' => ['task.view', 'task.create','task.edit','task.delete'],
+            'children' => $childMenusItems,
+        ]);
+
+        $groups[__('Main')][] = $adminMenuItem;
+
+        return $groups;
+}
+This is it, our Task Manager module is ready to view.
+
+Step 6: Browse in admin
+Go to – http://localhost:8000/admin/tasks
+
+Task Manager List Page: Here is the task manager list page with searching, sorting, filtering, pagination supports.
+
+Task Management Module | Lara Dashboard
+Task Manager List Page
+Task Manager Create / Edit Page: Here is the task manager create/edit page from where you can add/modify tasks very easily.
+
+Task Create Page – http://localhost:8000/admin/tasks/create
+
+Task Manager Module Create | Lara Dashboard
+Task Edit Page – http://localhost:8000/admin/tasks/21/edit
+
+
+Task Delete UI
+
+Task Manage Delete Task | Lara Dashboard
+Task Bulk Delete UI
+
+Task Manage Bulk Delete Tasks | Lara Dashboard
+Download Module Source Code
+You can download this module source code zip file from Github
+
+Download From Github
+Conclusion of Task Management Module:
+In this tutorial, we’ve shown you how to create a simple module in Lara Dashboard step by step guide. This is super useful for starter application users.
+
+Any more confusion or discussion please contact us.
+
+Video Tutorials of Task Management Module:
+You can get the complete video tutorial of how to Create this Task Manager Lara Dashboard module in youtube.
+
+
+Please share any of your thoughts regarding module of Lara Dashboard.
+
+What are your Feelings
+  
+  
+ 
+Share This Article :
+Facebook
+X
+LinkedIn
+Pinterest
+Still stuck? How can we help?
+Updated on June 22, 2025
+How to Create a Module in Lara Dashboard easily
+Modules with Livewire
+Leave a Reply
+Your email address will not be published. Required fields are marked *
+
+Comment *
+
+Name*
+Name*
+Email*
+Email*
+Website
+Website
+
+
+Table of Contents
+Step 1: Run Module create command
+Step 2: Add Database, Model, Migration, Seeders
+Step 3: Add request, service class
+Step 4: Route, Controller, View
+{{ __('Tasks') }}
+{{ __('Bulk Actions') }}
+{{ __('Delete Selected Tasks') }}
+Step 5: Add Task Manager Menu
+Step 6: Browse in admin
+Download Module Source Code
+Conclusion of Task Management Module:
+Video Tutorials of Task Management Module:
+
+Home
+
+Pricing
+
+Documentation
+
+Contact Us
+
+Tutorials
+
+Copyright © 2025 Lara Dashboard • All rights reserved
+

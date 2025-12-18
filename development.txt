@@ -1,0 +1,7 @@
+https://laradashboard.com/docs/how-to-create-a-module-in-lara-dashboard/
+
+superadmin@admin.com
+12345678
+
+
+php artisan module:seed
