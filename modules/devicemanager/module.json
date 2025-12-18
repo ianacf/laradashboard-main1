@@ -1,0 +1,17 @@
+{
+    "name": "DeviceManager",
+    "alias": "Devicemanager",
+    "description": "",
+    "icon": "bi-list-device",
+    "keywords": [
+        "device",
+        "manager",
+        "list"
+    ],
+    "priority": 0,
+    "providers": [
+        "Modules\\DeviceManager\\Providers\\DeviceManagerServiceProvider"
+    ],
+    "files": []
+}
+

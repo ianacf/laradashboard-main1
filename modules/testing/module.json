@@ -1,0 +1,17 @@
+{
+    "name": "Testing",
+    "alias": "Testing",
+    "description": "",
+    "icon": "bi-list-task",
+    "keywords": [
+        "task",
+        "manager",
+        "todo",
+        "list"
+    ],
+    "priority": 0,
+    "providers": [
+        "Modules\\Testing\\Providers\\TestingServiceProvider"
+    ],
+    "files": []
+}
